@@ -40,9 +40,9 @@ function TitleScreen({ onData, busy, error, savedAt, onContinue, onClearSaved })
       <Starfield />
       <div className="title-inner">
         <div className="title-crest">🗺️</div>
-        <h1 className="game-title">人生リプレイ</h1>
-        <div className="game-subtitle">— LIFE REPLAY —</div>
-        <p className="title-tagline">きみの移動履歴が、冒険の記録になる。</p>
+        <h1 className="game-title">ジブンクエスト</h1>
+        <div className="game-subtitle">— JIBUN QUEST —</div>
+        <p className="title-tagline">きみの毎日が、冒険の記録になる。</p>
 
         {busy ? (
           <div className="loading-box"><span className="loading-orb" />解析中…</div>
@@ -53,14 +53,36 @@ function TitleScreen({ onData, busy, error, savedAt, onContinue, onClearSaved })
                 ▶ 続きから再開 <small className="saved-at">({new Date(savedAt).toLocaleDateString('ja-JP')}読込)</small>
               </button>
             )}
-            <button className={`menu-btn ${savedAt ? '' : 'primary'}`} onClick={() => fileRef.current?.click()}>
-              ▶ タイムラインを読み込む
-            </button>
-            <button className="menu-btn" onClick={() => dirRef.current?.click()}>
-              ▶ フォルダごと読み込む(Takeout)
-            </button>
+
+            <div className="onboard-card">
+              <div className="onboard-head">🗂️ Googleマップのタイムラインを<b>使っていた人</b></div>
+              <ol className="onboard-steps">
+                <li>Googleマップ → プロフィール → <b>設定</b></li>
+                <li>「タイムライン」→「<b>タイムライン データをエクスポート</b>」</li>
+                <li>できたファイルを下のボタンで選ぶだけ!</li>
+              </ol>
+              <button className="menu-btn primary" onClick={() => fileRef.current?.click()}>
+                ▶ データを読み込む
+              </button>
+              <button className="link-btn" onClick={() => dirRef.current?.click()}>
+                PCのGoogle Takeout(ZIP・フォルダ)はこちら
+              </button>
+            </div>
+
+            <div className="onboard-card">
+              <div className="onboard-head">🌱 タイムラインが<b>オフだった人</b>・わからない人</div>
+              <ol className="onboard-steps">
+                <li>Googleマップ → 設定 → 「タイムライン」を<b>オン</b>にする</li>
+                <li>あとは普通に過ごすだけで記録が貯まっていく</li>
+                <li>今すぐLv.1から冒険開始! 貯まったら読み込んで一気にレベルアップ</li>
+              </ol>
+              <button className="menu-btn" onClick={() => onData('zero')}>
+                ▶ ゼロから冒険を始める
+              </button>
+            </div>
+
             <button className="menu-btn demo" onClick={() => onData('demo')}>
-              ▶ デモデータで遊ぶ
+              ▶ まずはデモデータで遊んでみる
             </button>
           </div>
         )}
@@ -69,15 +91,7 @@ function TitleScreen({ onData, busy, error, savedAt, onContinue, onClearSaved })
           <button className="clear-saved" onClick={onClearSaved}>保存データを消去</button>
         )}
 
-        <details className="format-help">
-          <summary>データの入手方法</summary>
-          <div>
-            <p><b>スマホから(現行・推奨):</b> Googleマップアプリ → プロフィール → 設定 → タイムライン(ロケーション履歴) → 「タイムラインデータをエクスポート」で JSON を書き出し、このページに読み込む</p>
-            <p><b>旧Google Takeout:</b> ダウンロードしたZIPをそのまま読み込めます(場所名つき)</p>
-            <p><b>2回目以降:</b> 一度読み込めば端末に保存され、次からはこのページを開くだけで自動復元されます</p>
-            <p className="privacy-note">🔒 解析はすべてこの端末内で完結します。位置データが外部に送信されることはありません。</p>
-          </div>
-        </details>
+        <p className="privacy-note title-privacy">🔒 解析はすべてこの端末内で完結。位置データが外部に送信されることはありません。一度読み込めば次回からは開くだけで自動復元されます。</p>
       </div>
       <input ref={fileRef} type="file" accept=".json,.zip,application/json,application/zip" multiple hidden
         onChange={(e) => handleFiles(e.target.files)} />
@@ -170,6 +184,7 @@ function BarChart({ data, labels, color = 'var(--gold)' }) {
 }
 
 function StatsTab({ stats }) {
+  const empty = stats.totalVisits === 0
   const fmtDate = (t) => new Date(t).toLocaleDateString('ja-JP')
   const years = (stats.spanDays / 365).toFixed(1)
   const cats = Object.entries(stats.categoryCounts)
@@ -178,11 +193,22 @@ function StatsTab({ stats }) {
   const monthlyLabels = stats.monthly.map((m, i) => (i % Math.ceil(stats.monthly.length / 12) === 0 ? m.ym.slice(2).replace('-', '/') : ''))
   return (
     <div className="tab-body">
+      {empty && (
+        <section className="panel zero-banner">
+          <h3 className="panel-title">🌱 冒険はここから!</h3>
+          <p className="panel-note">
+            まだ記録は0。でも準備はできてる。<br />
+            ① Googleマップの設定で<b>タイムラインをオン</b>にしておく<br />
+            ② いつも通り過ごすだけで、行った場所が自動で記録されていく<br />
+            ③ 数日〜数週間たったら「<b>タイムライン データをエクスポート</b>」→ タイトル画面で読み込み。スタッツと実績が一気に解放される!
+          </p>
+        </section>
+      )}
       <div className="stat-grid">
         <StatCard icon="📍" label="総訪問回数" value={stats.totalVisits.toLocaleString()} />
         <StatCard icon="🗺️" label="訪れた場所" value={stats.uniquePlaces.toLocaleString()} sub="ヶ所" />
         <StatCard icon="🛤️" label="総移動距離" value={formatKm(stats.totalDistanceKm)} sub={`地球${(stats.totalDistanceKm / 40075).toFixed(2)}周分`} />
-        <StatCard icon="⏳" label="記録期間" value={`${years}年`} sub={`${fmtDate(stats.firstTime)} 〜 ${fmtDate(stats.lastTime)}`} />
+        <StatCard icon="⏳" label="記録期間" value={empty ? '0日' : `${years}年`} sub={empty ? 'これからスタート!' : `${fmtDate(stats.firstTime)} 〜 ${fmtDate(stats.lastTime)}`} />
         <StatCard icon="🔥" label="最長ストリーク" value={`${stats.longestStreak}日`} sub="連続記録" />
         <StatCard icon="💨" label="最長移動日" value={formatKm(stats.maxDayDistanceKm)} sub={stats.maxDayDistanceDate || ''} />
       </div>
@@ -211,6 +237,7 @@ function StatsTab({ stats }) {
 
       <section className="panel">
         <h3 className="panel-title">🏆 よく行く場所 TOP10</h3>
+        {empty && <p className="panel-note">まだ記録がないよ。最初の1ヶ所目はどこになるかな?</p>}
         <ol className="top-places">
           {stats.places.slice(0, 10).map((p, i) => (
             <li key={p.key}>
@@ -288,6 +315,20 @@ const SPEEDS = [
 ]
 
 function ReplayTab({ data, stats }) {
+  if (!data.visits.length) {
+    return (
+      <div className="tab-body">
+        <section className="panel">
+          <h3 className="panel-title">🎬 リプレイ</h3>
+          <p className="panel-note">まだ再生できる記録がありません。タイムラインの記録が貯まって読み込むと、ここできみの毎日を地図の上でリプレイできます!</p>
+        </section>
+      </div>
+    )
+  }
+  return <ReplayMap data={data} stats={stats} />
+}
+
+function ReplayMap({ data, stats }) {
   const mapRef = useRef(null)
   const mapObj = useRef(null)
   const markerRef = useRef(null)
@@ -480,6 +521,7 @@ function PlacesTab({ stats, labels, setLabels }) {
       )}
       <section className="panel">
         <h3 className="panel-title">📜 訪問場所一覧(上位50)</h3>
+        {!stats.places.length && <p className="panel-note">まだ訪問記録がありません。記録が貯まるとここに場所が並びます。</p>}
         <div className="place-table">
           {stats.places.slice(0, 50).map((p) => (
             <div className="place-row" key={p.key}>
@@ -531,7 +573,7 @@ function App() {
   useEffect(() => {
     loadData()
       .then((d) => {
-        if (d && d.visits?.length) {
+        if (d && (d.visits?.length || d.zeroStart)) {
           setSaved(d)
           setData(d)
         }
@@ -564,6 +606,16 @@ function App() {
         localStorage.removeItem(LS_UNLOCKED)
         parsed = parseObjects([generateDemoData()])
         setIsDemo(true)
+      } else if (input === 'zero') {
+        // ゼロスタート: 記録0のまま冒険開始。状態を保存して次回も続きから
+        localStorage.removeItem(LS_UNLOCKED)
+        parsed = { visits: [], paths: [], activities: [], sourceFormats: [], errors: [], zeroStart: true }
+        setIsDemo(false)
+        saveData(parsed).then(() => setSaved({ ...parsed, savedAt: Date.now() })).catch(() => {})
+        setData(parsed)
+        setTab('stats')
+        setBusy(false)
+        return
       } else {
         parsed = await parseFiles(input)
         setIsDemo(false)
@@ -606,7 +658,7 @@ function App() {
         <div className="hdr-left">
           <span className="hdr-logo">🗺️</span>
           <div>
-            <div className="hdr-title">人生リプレイ</div>
+            <div className="hdr-title">ジブンクエスト</div>
             <div className="hdr-player">{titleForLevel(xp.level)}{isDemo && <span className="demo-chip">DEMO</span>}</div>
           </div>
         </div>
