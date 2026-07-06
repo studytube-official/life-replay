@@ -9,6 +9,7 @@ import { CATEGORIES, placeKeyOf } from './categories.js'
 import { evaluateAchievements, computeXp, titleForLevel, ACHIEVEMENTS } from './achievements.js'
 import { generateDemoData } from './demo.js'
 import { resolvePlaces } from './geocode.js'
+import { saveData, loadData, clearData } from './store.js'
 
 const LS_UNLOCKED = 'lr_unlocked'
 const LS_LABELS = 'lr_labels'
@@ -19,13 +20,13 @@ const saveJson = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)) } 
 // ------------------------------------------------------------------
 // タイトル画面
 // ------------------------------------------------------------------
-function TitleScreen({ onData, busy, error }) {
+function TitleScreen({ onData, busy, error, savedAt, onContinue, onClearSaved }) {
   const fileRef = useRef(null)
   const dirRef = useRef(null)
   const [drag, setDrag] = useState(false)
 
   const handleFiles = (list) => {
-    const files = [...list].filter((f) => /\.json$/i.test(f.name))
+    const files = [...list].filter((f) => /\.(json|zip)$/i.test(f.name))
     if (files.length) onData(files)
   }
 
@@ -47,7 +48,12 @@ function TitleScreen({ onData, busy, error }) {
           <div className="loading-box"><span className="loading-orb" />解析中…</div>
         ) : (
           <div className="title-menu">
-            <button className="menu-btn primary" onClick={() => fileRef.current?.click()}>
+            {savedAt && (
+              <button className="menu-btn primary" onClick={onContinue}>
+                ▶ 続きから再開 <small className="saved-at">({new Date(savedAt).toLocaleDateString('ja-JP')}読込)</small>
+              </button>
+            )}
+            <button className={`menu-btn ${savedAt ? '' : 'primary'}`} onClick={() => fileRef.current?.click()}>
               ▶ タイムラインを読み込む
             </button>
             <button className="menu-btn" onClick={() => dirRef.current?.click()}>
@@ -59,17 +65,21 @@ function TitleScreen({ onData, busy, error }) {
           </div>
         )}
         {error && <div className="title-error">{error}</div>}
+        {savedAt && !busy && (
+          <button className="clear-saved" onClick={onClearSaved}>保存データを消去</button>
+        )}
 
         <details className="format-help">
           <summary>データの入手方法</summary>
           <div>
             <p><b>スマホから(現行・推奨):</b> Googleマップアプリ → プロフィール → 設定 → タイムライン(ロケーション履歴) → 「タイムラインデータをエクスポート」で JSON を書き出し、このページに読み込む</p>
-            <p><b>旧Google Takeout:</b> Semantic Location History フォルダ内の JSON(こちらは場所名つき)</p>
+            <p><b>旧Google Takeout:</b> ダウンロードしたZIPをそのまま読み込めます(場所名つき)</p>
+            <p><b>2回目以降:</b> 一度読み込めば端末に保存され、次からはこのページを開くだけで自動復元されます</p>
             <p className="privacy-note">🔒 解析はすべてこの端末内で完結します。位置データが外部に送信されることはありません。</p>
           </div>
         </details>
       </div>
-      <input ref={fileRef} type="file" accept=".json,application/json" multiple hidden
+      <input ref={fileRef} type="file" accept=".json,.zip,application/json,application/zip" multiple hidden
         onChange={(e) => handleFiles(e.target.files)} />
       <input ref={dirRef} type="file" webkitdirectory="" hidden
         onChange={(e) => handleFiles(e.target.files)} />
@@ -514,6 +524,20 @@ function App() {
   const [labels, setLabels] = useState(() => loadJson(LS_LABELS, {}))
   const [ceremony, setCeremony] = useState(null)
   const [isDemo, setIsDemo] = useState(false)
+  const [booting, setBooting] = useState(true)
+  const [saved, setSaved] = useState(null) // 復元可能な保存データ
+
+  // 起動時: 保存済みデータがあれば自動復元して即開始
+  useEffect(() => {
+    loadData()
+      .then((d) => {
+        if (d && d.visits?.length) {
+          setSaved(d)
+          setData(d)
+        }
+      })
+      .finally(() => setBooting(false))
+  }, [])
 
   const stats = useMemo(() => (data ? computeStats(data, labels) : null), [data, labels])
   const achievements = useMemo(() => (stats ? evaluateAchievements(stats) : []), [stats])
@@ -549,6 +573,10 @@ function App() {
         setBusy(false)
         return
       }
+      if (input !== 'demo') {
+        // 実データは端末内に保存 → 次回からURLを開くだけで自動復元
+        saveData(parsed).then(() => setSaved(parsed)).catch(() => {})
+      }
       setData(parsed)
       setTab('stats')
     } catch (e) {
@@ -558,8 +586,18 @@ function App() {
     setBusy(false)
   }
 
+  if (booting) {
+    return null
+  }
   if (!data || !stats) {
-    return <TitleScreen onData={onData} busy={busy} error={error} />
+    return (
+      <TitleScreen
+        onData={onData} busy={busy} error={error}
+        savedAt={saved?.savedAt}
+        onContinue={() => { setData(saved); setIsDemo(false); setTab('stats') }}
+        onClearSaved={async () => { await clearData(); setSaved(null) }}
+      />
+    )
   }
 
   return (

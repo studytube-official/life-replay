@@ -182,10 +182,14 @@ export function parseDocument(json, out) {
   return false
 }
 
-// 複数ファイル(File[])を読み込んでマージ
+// 複数ファイル(File[])を読み込んでマージ。TakeoutのZIPもそのまま可
 export async function parseFiles(files) {
   const out = emptyResult()
   for (const file of files) {
+    if (/\.zip$/i.test(file.name)) {
+      await parseZip(file, out)
+      continue
+    }
     if (!/\.json$/i.test(file.name)) continue
     let json
     try {
@@ -200,6 +204,38 @@ export async function parseFiles(files) {
   }
   finalize(out)
   return out
+}
+
+// Takeout ZIP: 中のJSONを展開してパース(巨大なRecords.json等はスキップ)
+async function parseZip(file, out) {
+  let JSZip
+  try {
+    JSZip = (await import('jszip')).default
+  } catch {
+    out.errors.push(`${file.name}: ZIP読み込みモジュールのロードに失敗しました`)
+    return
+  }
+  let zip
+  try {
+    zip = await JSZip.loadAsync(file)
+  } catch {
+    out.errors.push(`${file.name}: ZIPとして読めませんでした`)
+    return
+  }
+  const entries = Object.values(zip.files).filter(
+    (e) => !e.dir && /\.json$/i.test(e.name) && !/Records\.json$/i.test(e.name) && !/Settings\.json$/i.test(e.name)
+  )
+  if (!entries.length) {
+    out.errors.push(`${file.name}: ZIP内に対応するJSONが見つかりませんでした`)
+    return
+  }
+  for (const entry of entries) {
+    try {
+      const text = await entry.async('string')
+      if (text.length > 200 * 1024 * 1024) continue // 異常サイズは安全のためスキップ
+      parseDocument(JSON.parse(text), out)
+    } catch { /* 個別エントリの失敗は無視して続行 */ }
+  }
 }
 
 // デモ/テスト用: 直接オブジェクトから
