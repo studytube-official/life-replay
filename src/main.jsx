@@ -17,6 +17,9 @@ const LS_LABELS = 'lr_labels'
 const loadJson = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d } catch { return d } }
 const saveJson = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)) } catch {} }
 
+// GA4イベント(匿名の利用イベントのみ。位置データは送らない)
+const track = (name, params) => { try { window.gtag?.('event', name, params) } catch {} }
+
 // ------------------------------------------------------------------
 // タイトル画面
 // ------------------------------------------------------------------
@@ -606,11 +609,13 @@ function App() {
         localStorage.removeItem(LS_UNLOCKED)
         parsed = parseObjects([generateDemoData()])
         setIsDemo(true)
+        track('demo_start')
       } else if (input === 'zero') {
         // ゼロスタート: 記録0のまま冒険開始。状態を保存して次回も続きから
         localStorage.removeItem(LS_UNLOCKED)
         parsed = { visits: [], paths: [], activities: [], sourceFormats: [], errors: [], zeroStart: true }
         setIsDemo(false)
+        track('zero_start')
         saveData(parsed).then(() => setSaved({ ...parsed, savedAt: Date.now() })).catch(() => {})
         setData(parsed)
         setTab('stats')
@@ -628,6 +633,7 @@ function App() {
       if (input !== 'demo') {
         // 実データは端末内に保存 → 次回からURLを開くだけで自動復元
         saveData(parsed).then(() => setSaved(parsed)).catch(() => {})
+        track('data_import', { formats: parsed.sourceFormats.join(',') })
       }
       setData(parsed)
       setTab('stats')
