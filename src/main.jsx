@@ -10,6 +10,9 @@ import { evaluateAchievements, computeXp, titleForLevel, ACHIEVEMENTS } from './
 import { generateDemoData } from './demo.js'
 import { resolvePlaces } from './geocode.js'
 import { saveData, loadData, clearData } from './store.js'
+import { beacon, fetchSiteStats } from './beacon.js'
+
+const APP_VERSION = 'v0.3'
 
 const LS_UNLOCKED = 'lr_unlocked'
 const LS_LABELS = 'lr_labels'
@@ -17,8 +20,12 @@ const LS_LABELS = 'lr_labels'
 const loadJson = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d } catch { return d } }
 const saveJson = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)) } catch {} }
 
-// GA4イベント(匿名の利用イベントのみ。位置データは送らない)
-const track = (name, params) => { try { window.gtag?.('event', name, params) } catch {} }
+// 計測(匿名の利用イベントのみ。位置データは送らない)
+// GA4 + 自前カウンター(Supabase)の二重送信。ブロッカーでGAが死んでも自前側で数えられる
+const track = (name, params) => {
+  try { window.gtag?.('event', name, params) } catch {}
+  beacon(name, params)
+}
 
 // ------------------------------------------------------------------
 // タイトル画面
@@ -95,6 +102,7 @@ function TitleScreen({ onData, busy, error, savedAt, onContinue, onClearSaved })
         )}
 
         <p className="privacy-note title-privacy">🔒 解析はすべてこの端末内で完結。位置データが外部に送信されることはありません。一度読み込めば次回からは開くだけで自動復元されます。</p>
+        <div className="app-version">{APP_VERSION}</div>
       </div>
       <input ref={fileRef} type="file" accept=".json,.zip,application/json,application/zip" multiple hidden
         onChange={(e) => handleFiles(e.target.files)} />
@@ -552,6 +560,28 @@ function PlacesTab({ stats, labels, setLabels }) {
 }
 
 // ------------------------------------------------------------------
+// サイト訪問数パネル (?stats を付けたURLでのみ表示 — 運営者用)
+// ------------------------------------------------------------------
+function SiteStatsPanel() {
+  const [stats, setStats] = useState(undefined)
+  useEffect(() => { fetchSiteStats().then(setStats) }, [])
+  return (
+    <div className="site-stats">
+      <div className="site-stats-title">👁 サイト訪問数</div>
+      {stats === undefined && <div className="site-stats-row">読み込み中…</div>}
+      {stats === null && <div className="site-stats-row">取得失敗(テーブル未作成?)</div>}
+      {stats && (
+        <>
+          <div className="site-stats-row"><span>累計</span><b>{stats.total?.toLocaleString?.() ?? stats.total}</b></div>
+          <div className="site-stats-row"><span>24時間</span><b>{stats.last24h?.toLocaleString?.() ?? stats.last24h}</b></div>
+          <div className="site-stats-row"><span>7日間</span><b>{stats.last7d?.toLocaleString?.() ?? stats.last7d}</b></div>
+        </>
+      )}
+    </div>
+  )
+}
+
+// ------------------------------------------------------------------
 // App
 // ------------------------------------------------------------------
 const TABS = [
@@ -571,6 +601,9 @@ function App() {
   const [isDemo, setIsDemo] = useState(false)
   const [booting, setBooting] = useState(true)
   const [saved, setSaved] = useState(null) // 復元可能な保存データ
+
+  // 訪問カウント(1回/ページロード)
+  useEffect(() => { beacon('visit') }, [])
 
   // 起動時: 保存済みデータがあれば自動復元して即開始
   useEffect(() => {
@@ -644,28 +677,35 @@ function App() {
     setBusy(false)
   }
 
+  const statsMode = useMemo(() => new URLSearchParams(location.search).has('stats'), [])
+  const statsPanel = statsMode ? <SiteStatsPanel /> : null
+
   if (booting) {
-    return null
+    return statsPanel
   }
   if (!data || !stats) {
     return (
-      <TitleScreen
-        onData={onData} busy={busy} error={error}
-        savedAt={saved?.savedAt}
-        onContinue={() => { setData(saved); setIsDemo(false); setTab('stats') }}
-        onClearSaved={async () => { await clearData(); setSaved(null) }}
-      />
+      <>
+        {statsPanel}
+        <TitleScreen
+          onData={onData} busy={busy} error={error}
+          savedAt={saved?.savedAt}
+          onContinue={() => { setData(saved); setIsDemo(false); setTab('stats') }}
+          onClearSaved={async () => { await clearData(); setSaved(null) }}
+        />
+      </>
     )
   }
 
   return (
     <div className="app">
+      {statsPanel}
       <header className="app-header">
         <div className="hdr-left">
           <span className="hdr-logo">🗺️</span>
           <div>
             <div className="hdr-title">ジブンクエスト</div>
-            <div className="hdr-player">{titleForLevel(xp.level)}{isDemo && <span className="demo-chip">DEMO</span>}</div>
+            <div className="hdr-player">{titleForLevel(xp.level)}{isDemo && <span className="demo-chip">DEMO</span>}<span className="hdr-version">{APP_VERSION}</span></div>
           </div>
         </div>
         <div className="hdr-right">
