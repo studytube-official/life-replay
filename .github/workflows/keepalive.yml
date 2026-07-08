@@ -1,0 +1,21 @@
+# Supabase無料プランの自動一時停止(7日間アクセスなし)を防ぐキープアライブ
+# 週2回、REST APIに軽い読み取りを送るだけ。WorkMate本体とジブンクエストの
+# 訪問カウンターの両方がこのDBに依存している。
+name: Supabase keep-alive
+
+on:
+  schedule:
+    - cron: '0 3 * * 1,4' # 月・木 3:00 UTC
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Supabase REST API
+        run: |
+          curl -sf -o /dev/null \
+            -H "apikey: sb_publishable_bPO42kQg7TtPM3im9_LBNA_-6-BSw93" \
+            -H "Authorization: Bearer sb_publishable_bPO42kQg7TtPM3im9_LBNA_-6-BSw93" \
+            "https://zkquchdaizdjrvlsncbs.supabase.co/rest/v1/jobs?select=id&limit=1"
+          echo "Supabase is awake"
