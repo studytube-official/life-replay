@@ -2,17 +2,22 @@ import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { createRoot } from 'react-dom/client'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
+import '@fontsource/dotgothic16/japanese-400.css'
+import '@fontsource/zen-kaku-gothic-new/japanese-400.css'
+import '@fontsource/zen-kaku-gothic-new/japanese-500.css'
+import '@fontsource/zen-kaku-gothic-new/japanese-700.css'
+import '@fontsource/cinzel/latin-500.css'
+import '@fontsource/cinzel/latin-700.css'
 import './style.css'
-import { parseFiles, parseObjects } from './parse.js'
+import { mergeParsedData, parseFiles, parseObjects } from './parse.js'
 import { computeStats, formatKm } from './stats.js'
 import { CATEGORIES, placeKeyOf } from './categories.js'
 import { evaluateAchievements, computeXp, titleForLevel, ACHIEVEMENTS } from './achievements.js'
 import { generateDemoData } from './demo.js'
-import { resolvePlaces } from './geocode.js'
 import { saveData, loadData, clearData } from './store.js'
-import { beacon, fetchSiteStats } from './beacon.js'
+import { recordVisit, fetchSiteStats } from './beacon.js'
 
-const APP_VERSION = 'v0.3'
+const APP_VERSION = 'v0.4'
 
 const LS_UNLOCKED = 'lr_unlocked'
 const LS_LABELS = 'lr_labels'
@@ -20,32 +25,79 @@ const LS_LABELS = 'lr_labels'
 const loadJson = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d } catch { return d } }
 const saveJson = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)) } catch {} }
 
-// 計測(匿名の利用イベントのみ。位置データは送らない)
-// GA4 + 自前カウンター(Supabase)の二重送信。ブロッカーでGAが死んでも自前側で数えられる
-const track = (name, params) => {
-  try { window.gtag?.('event', name, params) } catch {}
-  beacon(name, params)
+const detectPlatform = () => {
+  const ua = navigator.userAgent || ''
+  if (/Android/i.test(ua)) return 'android'
+  if (/iPhone|iPad|iPod/i.test(ua)) return 'ios'
+  return 'pc'
 }
+
+// 通信を一切行わないLeaflet背景。地理的な位置関係・軌跡・ズームは保ち、
+// 道路地図タイルの代わりにRPG風の星図を端末内Canvasで生成する。
+const OfflineGridLayer = L.GridLayer.extend({
+  createTile(coords) {
+    const tile = L.DomUtil.create('canvas', 'offline-map-tile')
+    const size = this.getTileSize()
+    tile.width = size.x
+    tile.height = size.y
+    const ctx = tile.getContext('2d')
+    ctx.fillStyle = '#080c1f'
+    ctx.fillRect(0, 0, size.x, size.y)
+
+    const glow = ctx.createRadialGradient(size.x * 0.5, size.y * 0.35, 0, size.x * 0.5, size.y * 0.35, size.x * 0.8)
+    glow.addColorStop(0, 'rgba(72, 91, 170, 0.16)')
+    glow.addColorStop(1, 'rgba(8, 12, 31, 0)')
+    ctx.fillStyle = glow
+    ctx.fillRect(0, 0, size.x, size.y)
+
+    ctx.strokeStyle = 'rgba(124, 155, 255, 0.10)'
+    ctx.lineWidth = 1
+    for (let n = 0; n <= size.x; n += 64) {
+      ctx.beginPath(); ctx.moveTo(n, 0); ctx.lineTo(n, size.y); ctx.stroke()
+      ctx.beginPath(); ctx.moveTo(0, n); ctx.lineTo(size.x, n); ctx.stroke()
+    }
+
+    let seed = (Math.imul(coords.x, 73856093) ^ Math.imul(coords.y, 19349663) ^ Math.imul(coords.z, 83492791)) >>> 0
+    const random = () => {
+      seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0
+      return seed / 4294967296
+    }
+    for (let i = 0; i < 24; i++) {
+      const radius = random() > 0.88 ? 1.4 : 0.7
+      ctx.beginPath()
+      ctx.fillStyle = `rgba(232, 234, 246, ${0.2 + random() * 0.6})`
+      ctx.arc(random() * size.x, random() * size.y, radius, 0, Math.PI * 2)
+      ctx.fill()
+    }
+    return tile
+  },
+})
 
 // ------------------------------------------------------------------
 // タイトル画面
 // ------------------------------------------------------------------
 function TitleScreen({ onData, busy, error, savedAt, onContinue, onClearSaved }) {
   const fileRef = useRef(null)
+  const updateRef = useRef(null)
   const dirRef = useRef(null)
   const [drag, setDrag] = useState(false)
+  const [platform, setPlatform] = useState(detectPlatform)
 
-  const handleFiles = (list) => {
+  const handleFiles = (list, mode = 'replace') => {
     const files = [...list].filter((f) => /\.(json|zip)$/i.test(f.name))
-    if (files.length) onData(files)
+    if (files.length) onData(files, mode)
   }
+
+  const officialUrl = platform === 'android'
+    ? 'https://support.google.com/maps/answer/6258979?co=GENIE.Platform%3DAndroid&hl=ja'
+    : 'https://support.google.com/maps/answer/6258979?co=GENIE.Platform%3DiOS&hl=ja'
 
   return (
     <div
       className={`title-screen ${drag ? 'dragging' : ''}`}
       onDragOver={(e) => { e.preventDefault(); setDrag(true) }}
       onDragLeave={() => setDrag(false)}
-      onDrop={(e) => { e.preventDefault(); setDrag(false); handleFiles(e.dataTransfer.files) }}
+      onDrop={(e) => { e.preventDefault(); setDrag(false); handleFiles(e.dataTransfer.files, savedAt ? 'merge' : 'replace') }}
     >
       <Starfield />
       <div className="title-inner">
@@ -59,30 +111,59 @@ function TitleScreen({ onData, busy, error, savedAt, onContinue, onClearSaved })
         ) : (
           <div className="title-menu">
             {savedAt && (
-              <button className="menu-btn primary" onClick={onContinue}>
-                ▶ 続きから再開 <small className="saved-at">({new Date(savedAt).toLocaleDateString('ja-JP')}読込)</small>
-              </button>
+              <div className="saved-actions">
+                <button className="menu-btn primary" onClick={onContinue}>
+                  ▶ 続きから再開 <small className="saved-at">({new Date(savedAt).toLocaleDateString('ja-JP')}更新)</small>
+                </button>
+                <button className="menu-btn update" onClick={() => updateRef.current?.click()}>
+                  ⟳ 最新データを追加
+                </button>
+              </div>
             )}
 
-            <div className="onboard-card">
-              <div className="onboard-head">🗂️ Googleマップのタイムラインを<b>使っていた人</b></div>
-              <ol className="onboard-steps">
-                <li>Googleマップ → プロフィール → <b>設定</b></li>
-                <li>「タイムライン」→「<b>タイムライン データをエクスポート</b>」</li>
-                <li>できたファイルを下のボタンで選ぶだけ!</li>
-              </ol>
+            <div className="onboard-card import-card">
+              <div className="onboard-head">📱 Googleタイムラインを<b>このスマホから直接</b></div>
+              <p className="onboard-lead">PCへ送る必要はありません。書き出したJSONを同じ端末で選べば完了です。</p>
+              <div className="platform-tabs" role="tablist" aria-label="端末を選択">
+                <button className={platform === 'ios' ? 'active' : ''} onClick={() => setPlatform('ios')}>iPhone</button>
+                <button className={platform === 'android' ? 'active' : ''} onClick={() => setPlatform('android')}>Android</button>
+                <button className={platform === 'pc' ? 'active' : ''} onClick={() => setPlatform('pc')}>PC・旧データ</button>
+              </div>
+              {platform === 'ios' && (
+                <ol className="onboard-steps">
+                  <li>Googleマップ → プロフィール → <b>設定</b></li>
+                  <li><b>個人的なコンテンツ</b>（または「位置情報とプライバシー」）→ エクスポート</li>
+                  <li>「<b>ファイルに保存</b>」後、この画面で <code>location-history.json</code> を選ぶ</li>
+                </ol>
+              )}
+              {platform === 'android' && (
+                <ol className="onboard-steps">
+                  <li>Googleマップではなく、端末の<b>設定</b>を開く</li>
+                  <li><b>位置情報</b> → 位置情報サービス → タイムライン</li>
+                  <li>「<b>タイムライン データをエクスポート</b>」で保存後、この画面で選ぶ</li>
+                </ol>
+              )}
+              {platform === 'pc' && (
+                <ol className="onboard-steps">
+                  <li>以前に保存したGoogle TakeoutのZIPまたはJSONに対応</li>
+                  <li>ZIPは展開せず、そのまま選択できます</li>
+                  <li>現在の端末版タイムラインはiPhone/Androidタブの手順を使ってください</li>
+                </ol>
+              )}
               <button className="menu-btn primary" onClick={() => fileRef.current?.click()}>
-                ▶ データを読み込む
+                ▶ {savedAt ? '最新データを追加する' : (platform === 'pc' ? 'ZIP・JSONを選ぶ' : '書き出したJSONを選ぶ')}
               </button>
-              <button className="link-btn" onClick={() => dirRef.current?.click()}>
-                PCのGoogle Takeout(ZIP・フォルダ)はこちら
-              </button>
+              {platform === 'pc' ? (
+                <button className="link-btn" onClick={() => dirRef.current?.click()}>展開済みフォルダを選ぶ</button>
+              ) : (
+                <a className="help-link" href={officialUrl} target="_blank" rel="noreferrer">Google公式の手順を確認 ↗</a>
+              )}
             </div>
 
             <div className="onboard-card">
               <div className="onboard-head">🌱 タイムラインが<b>オフだった人</b>・わからない人</div>
               <ol className="onboard-steps">
-                <li>Googleマップ → 設定 → 「タイムライン」を<b>オン</b>にする</li>
+                <li>Googleマップ → プロフィール →「タイムライン」を開いて<b>オン</b>にする</li>
                 <li>あとは普通に過ごすだけで記録が貯まっていく</li>
                 <li>今すぐLv.1から冒険開始! 貯まったら読み込んで一気にレベルアップ</li>
               </ol>
@@ -101,13 +182,15 @@ function TitleScreen({ onData, busy, error, savedAt, onContinue, onClearSaved })
           <button className="clear-saved" onClick={onClearSaved}>保存データを消去</button>
         )}
 
-        <p className="privacy-note title-privacy">🔒 解析はすべてこの端末内で完結。位置データが外部に送信されることはありません。一度読み込めば次回からは開くだけで自動復元されます。</p>
+        <p className="privacy-note title-privacy">🔒 読み込んだ位置データは、この端末内だけで解析・保存。地図表示を含め外部へ送信しません。一度読み込めば次回から自動復元されます。</p>
         <div className="app-version">{APP_VERSION}</div>
       </div>
       <input ref={fileRef} type="file" accept=".json,.zip,application/json,application/zip" multiple hidden
-        onChange={(e) => handleFiles(e.target.files)} />
+        onChange={(e) => { handleFiles(e.target.files, savedAt ? 'merge' : 'replace'); e.target.value = '' }} />
+      <input ref={updateRef} type="file" accept=".json,.zip,application/json,application/zip" multiple hidden
+        onChange={(e) => { handleFiles(e.target.files, 'merge'); e.target.value = '' }} />
       <input ref={dirRef} type="file" webkitdirectory="" hidden
-        onChange={(e) => handleFiles(e.target.files)} />
+        onChange={(e) => { handleFiles(e.target.files, savedAt ? 'merge' : 'replace'); e.target.value = '' }} />
     </div>
   )
 }
@@ -209,9 +292,9 @@ function StatsTab({ stats }) {
           <h3 className="panel-title">🌱 冒険はここから!</h3>
           <p className="panel-note">
             まだ記録は0。でも準備はできてる。<br />
-            ① Googleマップの設定で<b>タイムラインをオン</b>にしておく<br />
+            ① Googleマップのプロフィールから<b>タイムラインをオン</b>にしておく<br />
             ② いつも通り過ごすだけで、行った場所が自動で記録されていく<br />
-            ③ 数日〜数週間たったら「<b>タイムライン データをエクスポート</b>」→ タイトル画面で読み込み。スタッツと実績が一気に解放される!
+            ③ 数日〜数週間たったら「<b>タイムライン データをエクスポート</b>」→ 右上の⟳から追加。スタッツと実績が一気に解放される!
           </p>
         </section>
       )}
@@ -377,14 +460,12 @@ function ReplayMap({ data, stats }) {
     return { lat: v.lat + (nx.lat - v.lat) * f, lng: v.lng + (nx.lng - v.lng) * f, visit: null }
   }, [visits])
 
-  // 地図初期化
+  // 端末内だけで描画する冒険マップ初期化
   useEffect(() => {
     if (!mapRef.current || mapObj.current) return
     const center = stats.topPlace ? [stats.topPlace.lat, stats.topPlace.lng] : [35.68, 139.76]
-    const map = L.map(mapRef.current, { zoomControl: true }).setView(center, 12)
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-      attribution: '&copy; OpenStreetMap &copy; CARTO', maxZoom: 19,
-    }).addTo(map)
+    const map = L.map(mapRef.current, { zoomControl: true, attributionControl: false }).setView(center, 12)
+    new OfflineGridLayer({ tileSize: 256, minZoom: 2, maxZoom: 19, noWrap: true }).addTo(map)
     // よく行く場所を訪問回数に応じた光る円で表示
     for (const p of stats.places.slice(0, 60)) {
       const r = 4 + Math.min(18, Math.sqrt(p.count) * 1.4)
@@ -392,10 +473,13 @@ function ReplayMap({ data, stats }) {
         radius: r, color: CATEGORIES[p.category]?.color || '#9ca3af',
         fillColor: CATEGORIES[p.category]?.color || '#9ca3af',
         fillOpacity: 0.25, weight: 1.5, opacity: 0.8,
-      }).addTo(map).bindTooltip(
-        `${CATEGORIES[p.category]?.icon || '📍'} ${p.name || '名もなき場所'}<br>${p.count}回訪問`,
-        { className: 'lr-tooltip' }
-      )
+      }).addTo(map).bindTooltip((() => {
+        const content = document.createElement('span')
+        content.append(document.createTextNode(`${CATEGORIES[p.category]?.icon || '📍'} ${p.name || '名もなき場所'}`))
+        content.append(document.createElement('br'))
+        content.append(document.createTextNode(`${p.count}回訪問`))
+        return content
+      })(), { className: 'lr-tooltip' })
     }
     trailRef.current = L.polyline([], { color: '#fbbf24', weight: 2.5, opacity: 0.85 }).addTo(map)
     const heroIcon = L.divIcon({ className: 'hero-marker', html: '<div class="hero-dot"><span>🧭</span></div>', iconSize: [34, 34], iconAnchor: [17, 17] })
@@ -468,7 +552,10 @@ function ReplayMap({ data, stats }) {
             : '🚶 移動中…'}
         </div>
       </div>
-      <div className="map-wrap"><div ref={mapRef} className="map" /></div>
+      <div className="map-wrap">
+        <div ref={mapRef} className="map" />
+        <div className="map-privacy">🔒 オフライン冒険マップ</div>
+      </div>
       <div className="replay-controls">
         <button className="ctl-btn" onClick={restart} title="最初から">⏮</button>
         <button className="ctl-btn play" onClick={() => setPlaying(!playing)}>{playing ? '⏸' : '▶'}</button>
@@ -484,25 +571,10 @@ function ReplayMap({ data, stats }) {
 }
 
 // ------------------------------------------------------------------
-// 場所タブ (名前解決・手動ラベル)
+// 場所タブ (端末内の手動ラベル)
 // ------------------------------------------------------------------
 function PlacesTab({ stats, labels, setLabels }) {
-  const [resolving, setResolving] = useState(null)
   const unnamed = stats.places.filter((p) => !p.name)
-
-  const runResolve = async () => {
-    setResolving({ done: 0, total: Math.min(40, unnamed.length), label: '' })
-    const found = await resolvePlaces(
-      unnamed.map((p) => ({ key: p.key, lat: p.lat, lng: p.lng })),
-      (done, total, label) => setResolving({ done, total, label }),
-    )
-    setLabels((prev) => {
-      const next = { ...prev, ...found }
-      saveJson(LS_LABELS, next)
-      return next
-    })
-    setResolving(null)
-  }
 
   const setPlace = (key, patch) => {
     setLabels((prev) => {
@@ -515,19 +587,11 @@ function PlacesTab({ stats, labels, setLabels }) {
   return (
     <div className="tab-body">
       {unnamed.length > 0 && (
-        <section className="panel">
-          <h3 className="panel-title">🔮 名もなき場所の解読</h3>
+        <section className="panel privacy-panel">
+          <h3 className="panel-title">🔒 場所名も端末内だけで設定</h3>
           <p className="panel-note">
-            現行のGoogleエクスポートには場所名が含まれません。OpenStreetMapで上位{Math.min(40, unnamed.length)}ヶ所の名前を推定できます(無料・約{Math.min(40, unnamed.length)}秒)。
+            現行のGoogleエクスポートには場所名が含まれません。自動検索には座標の外部送信が必要なため行わず、下の一覧でよく行く場所から名前を付けられます。自宅・職場はデータ内の分類だけで自動表示します。
           </p>
-          {resolving ? (
-            <div className="resolve-progress">
-              <div className="ach-progress-bar"><div style={{ width: `${(resolving.done / resolving.total) * 100}%` }} /></div>
-              <span>{resolving.done}/{resolving.total} {resolving.label}</span>
-            </div>
-          ) : (
-            <button className="menu-btn primary small" onClick={runResolve}>✨ 名前を解読する ({unnamed.length}ヶ所が未解読)</button>
-          )}
         </section>
       )}
       <section className="panel">
@@ -540,7 +604,7 @@ function PlacesTab({ stats, labels, setLabels }) {
               <input
                 className="place-input"
                 value={labels[p.key]?.name ?? p.name ?? ''}
-                placeholder={`(${p.lat.toFixed(3)}, ${p.lng.toFixed(3)})`}
+                placeholder={`場所名を入力 (${p.lat.toFixed(3)}, ${p.lng.toFixed(3)})`}
                 onChange={(e) => setPlace(p.key, { name: e.target.value })}
               />
               <select
@@ -601,9 +665,13 @@ function App() {
   const [isDemo, setIsDemo] = useState(false)
   const [booting, setBooting] = useState(true)
   const [saved, setSaved] = useState(null) // 復元可能な保存データ
+  const [importNotice, setImportNotice] = useState(null)
+  const [dropActive, setDropActive] = useState(false)
+  const updateInputRef = useRef(null)
+  const importLockRef = useRef(false)
 
-  // 訪問カウント(1回/ページロード)
-  useEffect(() => { beacon('visit') }, [])
+  // 訪問カウント(固定の visit 文字列だけ。読込データへアクセスしない)
+  useEffect(() => { recordVisit() }, [])
 
   // 起動時: 保存済みデータがあれば自動復元して即開始
   useEffect(() => {
@@ -632,49 +700,88 @@ function App() {
     }
   }, [achievements])
 
-  const onData = async (input) => {
+  const onData = async (input, mode = 'replace') => {
+    if (importLockRef.current) return
+    importLockRef.current = true
     setBusy(true)
     setError(null)
+    setImportNotice(null)
     try {
       let parsed
+      let report = null
       if (input === 'demo') {
         // デモは毎回まっさらな状態から(実績演出を見せるため)
         localStorage.removeItem(LS_UNLOCKED)
         parsed = parseObjects([generateDemoData()])
         setIsDemo(true)
-        track('demo_start')
       } else if (input === 'zero') {
         // ゼロスタート: 記録0のまま冒険開始。状態を保存して次回も続きから
         localStorage.removeItem(LS_UNLOCKED)
         parsed = { visits: [], paths: [], activities: [], sourceFormats: [], errors: [], zeroStart: true }
         setIsDemo(false)
-        track('zero_start')
-        saveData(parsed).then(() => setSaved({ ...parsed, savedAt: Date.now() })).catch(() => {})
+        try {
+          const stored = await saveData(parsed)
+          setSaved(stored)
+        } catch {
+          setImportNotice('冒険は開始できましたが、端末への保存に失敗しました。ブラウザのストレージ設定を確認してください。')
+        }
         setData(parsed)
         setTab('stats')
-        setBusy(false)
         return
       } else {
-        parsed = await parseFiles(input)
+        const incoming = await parseFiles(input)
+        if (!incoming.visits.length && !incoming.activities.length) {
+          setError(incoming.errors[0] || '訪問データが見つかりませんでした。Timeline.json / location-history.json を指定してください。')
+          return
+        }
+        const mergeBase = mode === 'merge' && !isDemo ? (data || saved) : null
+        if (mergeBase && (mergeBase.visits?.length || mergeBase.activities?.length || mergeBase.zeroStart)) {
+          const merged = mergeParsedData(mergeBase, incoming)
+          parsed = merged.data
+          report = merged.report
+        } else {
+          parsed = incoming
+        }
         setIsDemo(false)
       }
       if (!parsed.visits.length && !parsed.activities.length) {
         setError(parsed.errors[0] || '訪問データが見つかりませんでした。Timeline.json / location-history.json を指定してください。')
-        setBusy(false)
         return
       }
       if (input !== 'demo') {
         // 実データは端末内に保存 → 次回からURLを開くだけで自動復元
-        saveData(parsed).then(() => setSaved(parsed)).catch(() => {})
-        track('data_import', { formats: parsed.sourceFormats.join(',') })
+        let saveWarning = ''
+        try {
+          const stored = await saveData(parsed)
+          setSaved(stored)
+        } catch {
+          saveWarning = ' ただし端末への保存に失敗したため、次回は自動復元されません。'
+        }
+        if (report) {
+          const added = report.visitsAdded + report.activitiesAdded + report.pathsAdded
+          const details = [
+            report.visitsAdded ? `訪問${report.visitsAdded}件` : null,
+            report.activitiesAdded ? `移動${report.activitiesAdded}件` : null,
+            report.pathsAdded ? `経路${report.pathsAdded}本` : null,
+          ].filter(Boolean).join('・')
+          setImportNotice(
+            added
+              ? `最新データを追加しました：${details}${report.duplicatesSkipped ? `（重複${report.duplicatesSkipped}件を除外）` : ''}${saveWarning}`
+              : `確認完了：新しい記録はありません（重複${report.duplicatesSkipped}件を除外）。${saveWarning}`,
+          )
+        } else {
+          setImportNotice(`データを読み込みました：訪問${parsed.visits.length}件・移動${parsed.activities.length}件。${saveWarning}`)
+        }
       }
       setData(parsed)
       setTab('stats')
     } catch (e) {
       console.error(e)
       setError(`読み込みに失敗しました: ${e.message}`)
+    } finally {
+      importLockRef.current = false
+      setBusy(false)
     }
-    setBusy(false)
   }
 
   const statsMode = useMemo(() => new URLSearchParams(location.search).has('stats'), [])
@@ -698,8 +805,20 @@ function App() {
   }
 
   return (
-    <div className="app">
+    <div
+      className={`app ${dropActive ? 'dragging-data' : ''}`}
+      onDragOver={(e) => { e.preventDefault(); if (!busy) setDropActive(true) }}
+      onDragLeave={() => setDropActive(false)}
+      onDrop={(e) => {
+        e.preventDefault()
+        setDropActive(false)
+        if (busy) return
+        const files = [...e.dataTransfer.files].filter((f) => /\.(json|zip)$/i.test(f.name))
+        if (files.length) onData(files, isDemo ? 'replace' : 'merge')
+      }}
+    >
       {statsPanel}
+      {dropActive && <div className="app-drop-overlay">最新データをここにドロップ</div>}
       <header className="app-header">
         <div className="hdr-left">
           <span className="hdr-logo">🗺️</span>
@@ -714,7 +833,14 @@ function App() {
             <div className="xp-bar"><div style={{ width: `${xp.progress * 100}%` }} /></div>
             <div className="xp-text">{xp.xp.toLocaleString()} XP</div>
           </div>
+          <button className="reset-btn update-data-btn" disabled={busy} title="最新データを追加" onClick={() => updateInputRef.current?.click()}>{busy ? '…' : '⟳'}</button>
           <button className="reset-btn" title="別のデータを読み込む" onClick={() => { setData(null); setIsDemo(false) }}>↩</button>
+          <input ref={updateInputRef} type="file" accept=".json,.zip,application/json,application/zip" multiple hidden
+            onChange={(e) => {
+              const files = [...e.target.files]
+              if (files.length) onData(files, isDemo ? 'replace' : 'merge')
+              e.target.value = ''
+            }} />
         </div>
       </header>
 
@@ -725,6 +851,18 @@ function App() {
       </nav>
 
       <main className="app-main">
+        {error && (
+          <div className="import-notice error" role="alert">
+            <span>⚠ {error}</span>
+            <button onClick={() => setError(null)} aria-label="閉じる">×</button>
+          </div>
+        )}
+        {importNotice && (
+          <div className="import-notice" role="status">
+            <span>✓ {importNotice}</span>
+            <button onClick={() => setImportNotice(null)} aria-label="閉じる">×</button>
+          </div>
+        )}
         {tab === 'stats' && <StatsTab stats={stats} />}
         {tab === 'ach' && <AchievementsTab achievements={achievements} />}
         {tab === 'replay' && <ReplayTab data={data} stats={stats} />}

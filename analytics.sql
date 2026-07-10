@@ -13,10 +13,13 @@ create table if not exists public.jq_visits (
 
 alter table public.jq_visits enable row level security;
 
--- 匿名キーは「書き込みのみ」可。読み出しポリシーは作らない(生データは外から見えない)
+-- 匿名キーは固定の visit イベントだけ書き込み可。
+-- lang/ref/meta は必ず null に制限し、位置データを保存できる余地を作らない。
+-- 読み出しポリシーは作らない(生データは外から見えない)。
 drop policy if exists "jq_visits_anon_insert" on public.jq_visits;
 create policy "jq_visits_anon_insert" on public.jq_visits
-  for insert to anon, authenticated with check (true);
+  for insert to anon, authenticated
+  with check (event = 'visit' and lang is null and ref is null and meta is null);
 
 -- 集計だけを返す関数(?stats 表示用)
 create or replace function public.jq_stats()

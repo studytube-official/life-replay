@@ -1,20 +1,25 @@
 {
   "name": "life-replay",
   "private": true,
+  "type": "module",
   "version": "0.1.0",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "node --test"
   },
   "dependencies": {
+    "@fontsource/cinzel": "^5.2.8",
+    "@fontsource/dotgothic16": "^5.2.8",
+    "@fontsource/zen-kaku-gothic-new": "^5.2.7",
     "jszip": "^3.10.1",
     "leaflet": "^1.9.4",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
-    "@vitejs/plugin-react": "^4.3.4",
-    "vite": "^5.4.11"
+    "@vitejs/plugin-react": "^6.0.3",
+    "vite": "^8.1.4"
   }
 }

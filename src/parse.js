@@ -246,19 +246,93 @@ export function parseObjects(jsons) {
   return out
 }
 
+function pointKey(p) {
+  if (!p || !Number.isFinite(p.lat) || !Number.isFinite(p.lng)) return '-'
+  return `${p.lat.toFixed(5)},${p.lng.toFixed(5)}`
+}
+
+function visitKey(v) {
+  return `${v.start}|${v.end}|${pointKey(v)}`
+}
+
+function activityKey(a) {
+  return `${a.start}|${a.end}|${String(a.type).toUpperCase()}|${pointKey(a.from)}|${pointKey(a.to)}`
+}
+
+function pathKey(path) {
+  const first = path[0]
+  const last = path[path.length - 1]
+  return `${first?.time ?? '-'}|${last?.time ?? '-'}|${pointKey(first)}|${pointKey(last)}`
+}
+
+function dedupe(items, keyOf, merge = (current) => current) {
+  const map = new Map()
+  for (const item of items) {
+    const key = keyOf(item)
+    map.set(key, map.has(key) ? merge(map.get(key), item) : item)
+  }
+  return [...map.values()]
+}
+
+function normalizedCopy(data) {
+  const out = emptyResult()
+  out.visits.push(...(data?.visits || []))
+  out.activities.push(...(data?.activities || []))
+  out.paths.push(...(data?.paths || []))
+  for (const format of data?.sourceFormats || []) out.sourceFormats.add(format)
+  out.errors.push(...(data?.errors || []))
+  finalize(out)
+  return out
+}
+
+// 保存済みデータへ最新エクスポートを追加する。
+// 全履歴を再エクスポートしても、訪問・移動・経路を二重計上しない。
+export function mergeParsedData(current, incoming) {
+  const before = normalizedCopy(current)
+  const next = normalizedCopy(incoming)
+  const out = emptyResult()
+  out.visits.push(...before.visits, ...next.visits)
+  out.activities.push(...before.activities, ...next.activities)
+  out.paths.push(...before.paths, ...next.paths)
+  for (const format of [...before.sourceFormats, ...next.sourceFormats]) out.sourceFormats.add(format)
+  out.errors.push(...next.errors)
+  finalize(out)
+
+  const report = {
+    visitsAdded: Math.max(0, out.visits.length - before.visits.length),
+    activitiesAdded: Math.max(0, out.activities.length - before.activities.length),
+    pathsAdded: Math.max(0, out.paths.length - before.paths.length),
+  }
+  report.duplicatesSkipped = Math.max(0,
+    next.visits.length + next.activities.length + next.paths.length
+      - report.visitsAdded - report.activitiesAdded - report.pathsAdded,
+  )
+  return { data: { ...out, zeroStart: false }, report }
+}
+
 function finalize(out) {
-  out.visits.sort((a, b) => a.start - b.start)
-  out.activities.sort((a, b) => a.start - b.start)
-  out.paths.sort((a, b) => (a[0]?.time ?? 0) - (b[0]?.time ?? 0))
-  // 同一visitの重複除去(複数ファイルの期間重複対策)
-  const seen = new Set()
-  out.visits = out.visits.filter((v) => {
-    const k = `${v.start}|${v.placeId || `${v.lat.toFixed(5)},${v.lng.toFixed(5)}`}`
-    if (seen.has(k)) return false
-    seen.add(k)
-    return true
-  })
-  out.sourceFormats = [...out.sourceFormats]
+  // 新しい書き出しを優先しつつ、旧データだけが持つ場所名・住所は保持する。
+  out.visits = dedupe(out.visits, visitKey, (old, fresh) => ({
+    ...old,
+    ...fresh,
+    placeId: fresh.placeId || old.placeId,
+    name: fresh.name || old.name,
+    address: fresh.address || old.address,
+    semanticType: fresh.semanticType || old.semanticType,
+  })).sort((a, b) => a.start - b.start)
+  out.activities = dedupe(out.activities, activityKey, (old, fresh) => ({
+    ...old,
+    ...fresh,
+    type: fresh.type || old.type,
+    distanceMeters: fresh.distanceMeters || old.distanceMeters,
+    from: fresh.from || old.from,
+    to: fresh.to || old.to,
+  }))
+    .sort((a, b) => a.start - b.start)
+  out.paths = dedupe(out.paths.filter((p) => p.length), pathKey, (old, fresh) => (
+    fresh.length >= old.length ? fresh : old
+  )).sort((a, b) => (a[0]?.time ?? 0) - (b[0]?.time ?? 0))
+  out.sourceFormats = [...new Set(out.sourceFormats || [])]
 }
 
 // ハバースイン距離 (m)

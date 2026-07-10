@@ -1,6 +1,6 @@
 // 自前の訪問カウンター (Supabase / WorkMateと同じプロジェクトを利用)
-// GAが広告ブロッカーで止められても数えられる第一級のバックアップ。
-// 送る内容: イベント名・言語・リファラのみ。位置データは送らない。
+// 送信内容は固定文字列 { event: 'visit' } のみ。引数を受け取らないことで、
+// 読み込んだタイムラインや座標が誤って混入する経路を作らない。
 // テーブルが未作成の間は失敗して静かに無視される。
 
 const SB_URL = 'https://zkquchdaizdjrvlsncbs.supabase.co'
@@ -8,7 +8,7 @@ const SB_KEY = 'sb_publishable_bPO42kQg7TtPM3im9_LBNA_-6-BSw93'
 
 const isDev = () => location.hostname === 'localhost' || location.hostname === '127.0.0.1'
 
-export function beacon(event, meta) {
+export function recordVisit() {
   if (isDev()) return
   try {
     fetch(`${SB_URL}/rest/v1/jq_visits`, {
@@ -19,13 +19,10 @@ export function beacon(event, meta) {
         'Content-Type': 'application/json',
         Prefer: 'return=minimal',
       },
-      body: JSON.stringify({
-        event,
-        lang: navigator.language || null,
-        ref: document.referrer || null,
-        meta: meta && Object.keys(meta).length ? meta : null,
-      }),
+      body: '{"event":"visit"}',
       keepalive: true,
+      credentials: 'omit',
+      referrerPolicy: 'no-referrer',
     }).catch(() => {})
   } catch { /* 計測失敗はアプリに影響させない */ }
 }
@@ -41,6 +38,8 @@ export async function fetchSiteStats() {
         'Content-Type': 'application/json',
       },
       body: '{}',
+      credentials: 'omit',
+      referrerPolicy: 'no-referrer',
     })
     if (r.ok) return await r.json()
   } catch { /* オフライン等 */ }

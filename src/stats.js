@@ -115,6 +115,8 @@ export function computeStats(data, labels = {}) {
   for (const p of s.places) {
     p.category = inferCategory({ ...p, placeId: p.key.includes(',') ? null : p.key }, labels)
     if (labels[p.key]?.name) p.name = labels[p.key].name
+    else if (!p.name && p.semanticType === 'HOME') p.name = '自宅'
+    else if (!p.name && p.semanticType === 'WORK') p.name = '職場・学校'
   }
   s.places.sort((a, b) => b.count - a.count)
   s.uniquePlaces = s.places.length

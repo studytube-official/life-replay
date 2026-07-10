@@ -1,7 +1,7 @@
 // 場所カテゴリ定義と推定
 // 現行エクスポートには場所名が含まれないため、
 //  1) semanticType (HOME/WORK)
-//  2) 場所名のキーワードマッチ(旧Takeout・デモデータ・手動ラベル)
+//  2) 場所名のキーワードマッチ(旧Takeout・デモデータ・端末内の手動ラベル)
 // で判定する。
 
 export const CATEGORIES = {
@@ -42,7 +42,7 @@ const KEYWORDS = [
 ]
 
 export function inferCategory(visit, labels = {}) {
-  // 手動/解決済みラベル優先 (placeId or 座標キー)
+  // 端末内の手動ラベル優先 (placeId or 座標キー)
   const key = visit.placeId || coordKey(visit.lat, visit.lng)
   if (labels[key]?.category) return labels[key].category
   if (visit.semanticType === 'HOME') return 'home'
@@ -63,29 +63,4 @@ export function coordKey(lat, lng) {
 
 export function placeKeyOf(visit) {
   return visit.placeId || coordKey(visit.lat, visit.lng)
-}
-
-// OSM (Nominatim) の class/type → カテゴリ
-export function osmToCategory(cls, type) {
-  const t = `${cls}:${type}`
-  const map = {
-    'shop:convenience': 'convenience',
-    'amenity:cafe': 'cafe',
-    'amenity:restaurant': 'restaurant', 'amenity:fast_food': 'restaurant', 'amenity:bar': 'restaurant', 'amenity:pub': 'restaurant', 'amenity:food_court': 'restaurant',
-    'railway:station': 'station', 'railway:halt': 'station', 'amenity:bus_station': 'station', 'highway:bus_stop': 'station',
-    'shop:supermarket': 'supermarket', 'shop:grocery': 'supermarket',
-    'shop:mall': 'shopping', 'shop:department_store': 'shopping',
-    'leisure:fitness_centre': 'gym', 'leisure:sports_centre': 'gym', 'leisure:swimming_pool': 'gym',
-    'leisure:park': 'park', 'leisure:garden': 'park', 'natural:beach': 'park',
-    'amenity:cinema': 'entertainment', 'tourism:museum': 'entertainment', 'amenity:theatre': 'entertainment', 'tourism:zoo': 'entertainment', 'tourism:aquarium': 'entertainment', 'amenity:karaoke_box': 'entertainment',
-    'amenity:hospital': 'hospital', 'amenity:clinic': 'hospital', 'amenity:pharmacy': 'hospital', 'amenity:dentist': 'hospital', 'shop:chemist': 'hospital',
-    'tourism:hotel': 'hotel', 'tourism:hostel': 'hotel', 'tourism:guest_house': 'hotel',
-    'aeroway:aerodrome': 'airport', 'aeroway:terminal': 'airport',
-    'amenity:place_of_worship': 'shrine',
-    'amenity:university': 'school', 'amenity:school': 'school', 'amenity:library': 'school', 'amenity:college': 'school', 'amenity:language_school': 'school',
-  }
-  if (map[t]) return map[t]
-  if (cls === 'shop') return 'shopping'
-  if (cls === 'amenity' && type === 'marketplace') return 'shopping'
-  return null
 }

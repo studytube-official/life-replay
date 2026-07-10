@@ -17,10 +17,11 @@ function openDb() {
 
 export async function saveData(data) {
   const db = await openDb()
+  const stored = { ...data, savedAt: Date.now() }
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE, 'readwrite')
-    tx.objectStore(STORE).put({ ...data, savedAt: Date.now() }, KEY)
-    tx.oncomplete = () => { db.close(); resolve() }
+    tx.objectStore(STORE).put(stored, KEY)
+    tx.oncomplete = () => { db.close(); resolve(stored) }
     tx.onerror = () => { db.close(); reject(tx.error) }
   })
 }
