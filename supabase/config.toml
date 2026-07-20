@@ -1,0 +1,4 @@
+project_id = "life-replay"
+
+[functions.jq-place-candidates]
+verify_jwt = false

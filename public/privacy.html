@@ -1,0 +1,335 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#070a18">
+  <meta name="description" content="ジブンクエストのプライバシーポリシー">
+  <link rel="canonical" href="https://jibunq.com/privacy.html">
+  <title>プライバシーポリシー | ジブンクエスト</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg-deep: #070a18;
+      --bg: #0b1026;
+      --panel: rgba(20, 26, 54, 0.88);
+      --card: rgba(28, 35, 70, 0.74);
+      --line: rgba(148, 163, 230, 0.24);
+      --line-gold: rgba(212, 190, 120, 0.54);
+      --text: #e8eaf6;
+      --dim: #aab2d2;
+      --gold: #f5c542;
+      --gold-soft: #e8d28a;
+      --accent: #91aaff;
+      --green: #72dfaa;
+    }
+
+    * { box-sizing: border-box; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      min-height: 100vh;
+      margin: 0;
+      color: var(--text);
+      font-family: "Yu Gothic UI", "Hiragino Kaku Gothic ProN", Meiryo, sans-serif;
+      line-height: 1.85;
+      background:
+        radial-gradient(circle at 12% 16%, rgba(255, 255, 255, 0.72) 0 1px, transparent 1.5px),
+        radial-gradient(circle at 84% 8%, rgba(255, 255, 255, 0.62) 0 1px, transparent 1.5px),
+        radial-gradient(circle at 66% 34%, rgba(245, 197, 66, 0.55) 0 1px, transparent 1.5px),
+        radial-gradient(circle at 24% 72%, rgba(255, 255, 255, 0.5) 0 1px, transparent 1.5px),
+        radial-gradient(900px 520px at 82% -8%, #1b2352 0%, transparent 62%),
+        radial-gradient(760px 560px at 5% 105%, #16204a 0%, transparent 58%),
+        linear-gradient(180deg, var(--bg-deep), var(--bg) 55%, #0d1330);
+      background-attachment: fixed;
+    }
+
+    a { color: var(--accent); }
+    a:hover { color: var(--gold); }
+    a:focus-visible {
+      outline: 2px solid var(--gold);
+      outline-offset: 3px;
+      border-radius: 3px;
+    }
+
+    .shell {
+      width: min(880px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 28px 0 56px;
+    }
+
+    .back {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 44px;
+      color: var(--gold-soft);
+      text-decoration: none;
+      font-weight: 700;
+    }
+
+    .hero {
+      position: relative;
+      overflow: hidden;
+      margin: 8px 0 18px;
+      padding: clamp(26px, 6vw, 48px);
+      text-align: center;
+      background: linear-gradient(145deg, rgba(34, 43, 86, 0.96), rgba(15, 20, 46, 0.96));
+      border: 1px solid var(--line-gold);
+      border-radius: 20px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.36), inset 0 1px rgba(255, 255, 255, 0.07);
+    }
+
+    .hero::after {
+      content: "";
+      position: absolute;
+      inset: auto -10% -70% 32%;
+      height: 210px;
+      background: radial-gradient(ellipse, rgba(124, 155, 255, 0.2), transparent 67%);
+      pointer-events: none;
+    }
+
+    .crest {
+      margin: 0;
+      color: var(--gold);
+      font-size: 34px;
+      filter: drop-shadow(0 0 12px rgba(245, 197, 66, 0.35));
+    }
+
+    h1 {
+      margin: 8px 0 4px;
+      color: #fff4d1;
+      font-size: clamp(27px, 6vw, 42px);
+      line-height: 1.35;
+      letter-spacing: 0.04em;
+    }
+
+    .subtitle {
+      margin: 0;
+      color: var(--dim);
+      font-size: 14px;
+    }
+
+    .panel {
+      padding: clamp(22px, 5vw, 42px);
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      box-shadow: 0 14px 42px rgba(0, 0, 0, 0.27);
+      backdrop-filter: blur(10px);
+    }
+
+    .lead {
+      margin: 0 0 26px;
+      padding: 16px 18px;
+      color: #c9f5dc;
+      background: rgba(95, 211, 154, 0.08);
+      border: 1px solid rgba(95, 211, 154, 0.32);
+      border-radius: 12px;
+    }
+
+    section + section { margin-top: 34px; }
+
+    h2 {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 0 0 12px;
+      color: var(--gold-soft);
+      font-size: 20px;
+      line-height: 1.5;
+    }
+
+    h2::before {
+      content: "◆";
+      color: var(--gold);
+      font-size: 12px;
+    }
+
+    p { margin: 0; color: var(--dim); }
+    p + p { margin-top: 12px; }
+    strong { color: var(--text); }
+
+    ul {
+      margin: 10px 0 0;
+      padding-left: 1.5em;
+      color: var(--dim);
+    }
+
+    li + li { margin-top: 8px; }
+
+    .notice {
+      margin-top: 16px;
+      padding: 16px 18px;
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-left: 3px solid var(--green);
+      border-radius: 10px;
+    }
+
+    .date {
+      margin-top: 38px;
+      padding-top: 20px;
+      color: #7f89b2;
+      text-align: right;
+      font-size: 13px;
+      border-top: 1px solid var(--line);
+    }
+
+    footer {
+      padding: 24px 4px 0;
+      color: #7f89b2;
+      text-align: center;
+      font-size: 12px;
+    }
+
+    footer a { margin: 0 8px; }
+
+    @media (max-width: 520px) {
+      .shell { width: min(100% - 20px, 880px); padding-top: 14px; }
+      .panel { border-radius: 16px; }
+      section + section { margin-top: 28px; }
+      h2 { font-size: 18px; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <a class="back" href="/" aria-label="ジブンクエストに戻る">← ジブンクエストに戻る</a>
+
+    <header class="hero">
+      <p class="crest" aria-hidden="true">✦</p>
+      <h1>プライバシーポリシー</h1>
+      <p class="subtitle">あなたの冒険の記録を、あなたの手元に。</p>
+    </header>
+
+    <article class="panel">
+      <p class="lead">
+        ジブンクエストは、位置履歴を原則として利用者の端末内で解析・保存します。
+        施設名の候補を探す機能を使わない限り、位置履歴を外部の施設検索サービスへ送信しません。
+      </p>
+
+      <section>
+        <h2>1. 適用範囲</h2>
+        <p>
+          本ポリシーは、ウェブアプリ「ジブンクエスト」における情報の取扱いに適用されます。
+          外部サイトや外部サービスでは、それぞれの提供者のポリシーが適用されます。
+        </p>
+      </section>
+
+      <section>
+        <h2>2. 端末内で扱うデータ</h2>
+        <p>
+          利用者が読み込んだ位置履歴、解析結果、場所につけた名前やカテゴリなどは、
+          通常、ブラウザの保存領域（IndexedDBやlocalStorage等）に保存されます。
+          これらは地図表示、訪問傾向の解析、ゲーム進行の表示などに利用します。
+        </p>
+        <p>
+          ジブンクエストは、位置履歴全体を自動で施設検索サービスへ送信することはありません。
+        </p>
+      </section>
+
+      <section>
+        <h2>3. 「候補を探す」を使ったとき</h2>
+        <p>
+          利用者が場所の編集画面で<strong>「候補を探す」ボタンを明示的に押したときだけ</strong>、
+          その時点で選択している1地点の緯度・経度を、Supabase Edge Functionを経由して
+          Google Placesへ送信し、付近の施設名候補を取得します。
+        </p>
+        <ul>
+          <li>送信するもの：選択した1地点の緯度・経度</li>
+          <li>送信しないもの：位置履歴全体、移動経路、訪問時刻、端末内で保存した場所の名前</li>
+          <li>候補検索用サーバーでは、検索した座標や返された候補を保存しません</li>
+        </ul>
+        <div class="notice">
+          <p>
+            月間利用上限や不正利用防止のため、座標を含まない検索回数や短期的なレート制御情報を
+            取り扱う場合があります。また、通信の性質上、各サービス提供者がIPアドレス等の通信情報を
+            処理する場合があります。
+          </p>
+          <p>
+            レート制御ではIPアドレスそのものを保存せず、秘密鍵でHMAC化した値を利用します。
+            この値は2日を超えたものを日次処理で削除します。
+          </p>
+        </div>
+        <p>
+          Googleによる情報の取扱いについては、
+          <a href="https://policies.google.com/privacy?hl=ja" rel="noopener noreferrer">Google プライバシーポリシー</a>
+          をご確認ください。
+        </p>
+      </section>
+
+      <section>
+        <h2>4. 利用状況の集計</h2>
+        <p>
+          本番サイトを開いたとき、サービスの利用状況を把握するため、
+          固定文字列の訪問イベントをSupabaseへ送信します。
+          位置履歴、座標、移動経路、場所名、Google Place ID、端末内の解析結果は送信しません。
+        </p>
+        <p>
+          ジブンクエスト側では訪問件数の集計にのみ利用します。
+          通信の性質上、SupabaseがIPアドレス、ブラウザ情報等の通信情報を
+          セキュリティやサービス運用のために処理する場合があります。
+        </p>
+      </section>
+
+      <section>
+        <h2>5. 保存期間と削除</h2>
+        <p>
+          端末内のデータは、利用者が削除するまでブラウザに残る場合があります。
+          アプリのタイトル画面にある<strong>「保存データを消去」</strong>を選ぶと、
+          ジブンクエストが端末内に保存した位置履歴、解析結果、場所名、カテゴリ、
+          Google Place ID、実績状態を削除できます。
+          ブラウザの設定からjibunq.comのサイトデータを削除する方法もあります。
+        </p>
+        <p>
+          検索候補の施設名・住所・Googleのカテゴリは一時表示だけで、端末にもサーバーにも保存しません。
+          利用者が候補とカテゴリを確認して保存した場合は、Google Place IDと、
+          利用者が確認したジブンクエスト内のカテゴリだけを端末内へ保存します。
+          私的な場所名の入力は任意です。
+        </p>
+      </section>
+
+      <section>
+        <h2>6. 安全管理</h2>
+        <p>
+          必要な通信をHTTPSで行い、施設検索用の認証情報をブラウザへ公開しないなど、
+          取り扱う情報の性質に応じた安全管理に努めます。
+          ただし、インターネット上の通信や端末内保存について、完全な安全性を保証するものではありません。
+        </p>
+      </section>
+
+      <section>
+        <h2>7. ポリシーの変更</h2>
+        <p>
+          機能や法令の変更等に応じて、本ポリシーを更新することがあります。
+          重要な変更がある場合は、アプリ上など分かりやすい方法でお知らせするよう努めます。
+        </p>
+      </section>
+
+      <section>
+        <h2>8. お問い合わせ</h2>
+        <p>
+          プライバシーに関する質問や削除方法については、
+          <a href="https://github.com/studytube-official/life-replay/issues" rel="noopener noreferrer">GitHub Issues</a>
+          からお問い合わせください。公開投稿になるため、位置情報や氏名などの個人情報は書き込まないでください。
+        </p>
+      </section>
+
+      <p class="date">制定・最終更新：2026年7月20日</p>
+    </article>
+
+    <footer>
+      <a href="/">アプリへ戻る</a>
+      <a href="/terms.html">利用規約</a>
+      <span>© ジブンクエスト</span>
+    </footer>
+  </main>
+</body>
+</html>
